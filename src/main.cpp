@@ -73,20 +73,10 @@ std::vector<std::pair<std::string, std::vector<int>>> read_csv(std::string filen
 static std::string decompress(const std::string& filename) {
     using namespace std;  
     ifstream file(filename, ios_base::in | ios_base::binary);
-    boost::filtering_streambuf<input> in;
-    in.push(gzip_decompressor());
+    boost::iostreams::filtering_streambuf<boost::iostreams::input> in;
+    in.push(boost::iostreams::gzip_decompressor());
     in.push(file);
     boost::iostreams::copy(in, cout);
-}
-
-
-int extract_and_filter(std::string filename) {
-  std::ifstream ifs(filename);
-  std::string compressed_data( (std::istreambuf_iterator<char>(ifs) ),
-      (std::istreambuf_iterator<char>()    ) );
-  const char * compressed_pointer = compressed_data.data();
-  std::string decompressed_data = gzip::decompress(compressed_pointer, 
-      compressed_data.size());
 }
 
 int main(int argc, char **argv) {

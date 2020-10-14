@@ -142,60 +142,8 @@ find_package(Boost 1.62 REQUIRED COMPONENTS
 
 
 #find_package(LibArchive REQUIRED "libraries/libarchive")
-find_path(LibArchive_INCLUDE_DIR
-  NAMES archive.h
-  PATHS
-  "/home/criley38/.local/include"
-  DOC "libarchive include directory"
-  )
-
-find_library(LibArchive_LIBRARY
-  NAMES archive libarchive
-  PATHS
-  "/home/criley38/.local/lib"
-  DOC "libarchive library"
-  )
-
-mark_as_advanced(LibArchive_INCLUDE_DIR LibArchive_LIBRARY)
-message(${LibArchive_LIBRARY})
-message(${LibArchive_INCLUDE_DIR})
-# Extract the version number from the header.
-if(LibArchive_INCLUDE_DIR AND EXISTS "${LibArchive_INCLUDE_DIR}/archive.h")
-  # The version string appears in one of three known formats in the header:
-  #  #define ARCHIVE_LIBRARY_VERSION "libarchive 2.4.12"
-  #  #define ARCHIVE_VERSION_STRING "libarchive 2.8.4"
-  #  #define ARCHIVE_VERSION_ONLY_STRING "3.2.0"
-  # Match any format.
-  set(_LibArchive_VERSION_REGEX "^#define[ \t]+ARCHIVE[_A-Z]+VERSION[_A-Z]*[ \t]+\"(libarchive +)?([0-9]+)\\.([0-9]+)\\.([0-9]+)[^\"]*\".*$")
-  file(STRINGS "${LibArchive_INCLUDE_DIR}/archive.h" _LibArchive_VERSION_STRING LIMIT_COUNT 1 REGEX "${_LibArchive_VERSION_REGEX}")
-  if(_LibArchive_VERSION_STRING)
-    string(REGEX REPLACE "${_LibArchive_VERSION_REGEX}" "\\2.\\3.\\4" LibArchive_VERSION "${_LibArchive_VERSION_STRING}")
-  endif()
-  unset(_LibArchive_VERSION_REGEX)
-  unset(_LibArchive_VERSION_STRING)
-endif()
-
-find_package_handle_standard_args(LibArchive
-                                  REQUIRED_VARS LibArchive_LIBRARY LibArchive_INCLUDE_DIR
-                                  VERSION_VAR LibArchive_VERSION
-  )
-unset(LIBARCHIVE_FOUND)
-
-if(LibArchive_FOUND)
-  set(LibArchive_INCLUDE_DIRS ${LibArchive_INCLUDE_DIR})
-  set(LibArchive_LIBRARIES    ${LibArchive_LIBRARY})
-
-  if (NOT TARGET LibArchive::LibArchive)
-    add_library(LibArchive::LibArchive UNKNOWN IMPORTED)
-    set_target_properties(LibArchive::LibArchive PROPERTIES
-      IMPORTED_LOCATION "${LibArchive_LIBRARY}"
-      INTERFACE_INCLUDE_DIRECTORIES "${LibArchive_INCLUDE_DIR}")
-  endif ()
-endif()
 
 include_directories(${Boost_INCLUDE_DIRS})
-include_directories(${LibArchive_INCLUDE_DIR})
-include_directories("/home/criley38/filter-data-cpp/libraries/gzip-hpp/include")
 # Identify and link with the specific "packages" the project uses
 #find_package(package_name package_version REQUIRED package_type [other_options])
 #target_link_libraries(
@@ -209,7 +157,6 @@ include_directories("/home/criley38/filter-data-cpp/libraries/gzip-hpp/include")
 #)
 target_link_libraries(${PROJECT_NAME} bz2)
 target_link_libraries(${PROJECT_NAME} Boost::iostreams)
-target_link_libraries(${PROJECT_NAME} ${LibArchive_LIBRARY})
 target_link_libraries(${PROJECT_NAME} ZLIB::ZLIB)
 verbose_message("Successfully added all dependencies and linked against them.")
 
