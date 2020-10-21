@@ -10,8 +10,10 @@
 #include <utility> // std::pair
 #include <stdexcept> // std::runtime_error
 #include <sstream> // std::stringstream
+#include <chrono>
+#include <regex>
 
-
+#include <boost/filesystem.hpp>
 #include <boost/iostreams/filtering_streambuf.hpp>
 #include <boost/iostreams/copy.hpp>
 #include <boost/iostreams/filter/gzip.hpp>
@@ -24,243 +26,94 @@ bool test_point(double lat, double lng) {
 }
 
 
-std::vector<std::pair<std::string, std::vector<int>>> read_csv(std::string filename){
-  // Reads a CSV file into a vector of <string, vector<int>> pairs where
-  // each pair represents <column name, column values>
-  // Create a vector of <string, int vector> pairs to store the result
-  std::vector<std::pair<std::string, std::vector<int>>> result;
-  // Create an input filestream
-  std::ifstream myFile(filename);
-  // Make sure the file is open
-  if(!myFile.is_open()) throw std::runtime_error("Could not open file");
-  // Helper vars
-  std::string line, colname;
-  int val;
-  // Read the column names
-  if(myFile.good()) {
-    // Extract the first line in the file
-    std::getline(myFile, line);
-    // Create a stringstream from line
-    std::stringstream ss(line);
-    // Extract each column name
-    while(std::getline(ss, colname, ',')) {
-      // Initialize and add <colname, int vector> pairs to result
-      result.push_back({colname, std::vector<int> {}});
+std::vector<boost::filesystem::path> get_all(boost::filesystem::path const & root, std::string const & ext) {
+  std::vector<boost::filesystem::path> paths;
+  if (boost::filesystem::exists(root) && boost::filesystem::is_directory(root)) {
+    for (auto const & entry : boost::filesystem::recursive_directory_iterator(root)) {
+      if (boost::filesystem::is_regular_file(entry) && entry.path().extension() == ext)
+        paths.emplace_back(entry.path());
     }
   }
-  // Read data, line by line
-  while(std::getline(myFile, line)) {
-    // Create a stringstream of the current line
-    std::stringstream ss(line);
-    // Keep track of the current column index
-    int colIdx = 0;
-    // Extract each integer
-    while(ss >> val) {
-      // Add the current integer to the 'colIdx' column's values vector
-      result.at(colIdx).second.push_back(val);
-      // If the next token is a comma, ignore it and move on
-      if(ss.peek() == ',') ss.ignore();
-      // Increment the column index
-      colIdx++;
-    }
-  }
-  // Close file
-  myFile.close();
-  return result;
+  return paths;
+}             
+
+
+bool is_number( std::string token ) {
+  return std::regex_match( token, 
+      std::regex( ( "((\\+|-)?[[:digit:]]+)(\\.(([[:digit:]]+)?))?" ) ) );
 }
 
 
-static std::string decompress(const std::string& filename) {
-    using namespace std;  
-    ifstream file(filename, ios_base::in | ios_base::binary);
-    boost::iostreams::filtering_streambuf<boost::iostreams::input> in;
-    in.push(boost::iostreams::gzip_decompressor());
-    in.push(file);
-    boost::iostreams::copy(in, cout);
+std::string make_new_path(const std::string& filename) {
+  std::string word = "xmode-standard-export-gold-usa-obfuscated";  
+  std::string phrase = filename;
+  for (int i = 0; i < phrase.length(); i++) {
+    if (phrase[i] == ' ') {
+      phrase[i + 1] = std::toupper(phrase[i + 1]);
+    }
+  }
+
+  size_t pos = phrase.find(word); //find location of word
+  phrase.erase(0,pos+word.size()); //delete everything prior to location found
+  return phrase;
+}
+
+
+static int decompress(const std::string& filename, const std::string& outfolder) {
+  auto new_path = make_new_path(filename);
+  boost::filesystem::path output_path = boost::filesystem::absolute(outfolder) / new_path;
+  std::string on = output_path.string();
+  auto outfile_name = on.substr(0, on.size()-3);
+  using namespace std; 
+  stringstream ss;
+  stringstream decompressed;
+  std::string result;
+  std::cout << outfile_name << std::endl;
+  ifstream file(filename, ios_base::in | ios_base::binary);
+  boost::iostreams::filtering_streambuf<boost::iostreams::input> in;
+  in.push(boost::iostreams::gzip_decompressor());
+  in.push(file);
+  boost::iostreams::copy(in, decompressed);
+  int total_lines = 0;
+  int included_lines = 0;
+  for (std::string line; std::getline(decompressed, line); ){
+    std::istringstream s(line);
+    ++total_lines;
+    std::string field;
+    std::string lat, lng;
+    getline(s, field, ',');
+    getline(s, field, ',');
+    getline(s, field, ',');
+    getline(s, lat, ',');
+    getline(s, lng, ',');
+    if(is_number(lat) && is_number(lng)) { 
+      if(test_point(stod(lat), stod(lng))) {
+        ss << line;
+        ++included_lines;
+      }
+    }
+  }
+  std::cout << "writing " << included_lines << " of " << total_lines << " lines." << std::endl;
+  std::ofstream outfile;
+  outfile.open(outfile_name);
+  outfile << ss.rdbuf();
+  return 0;
 }
 
 int main(int argc, char **argv) {
-  decompress(argv[1]);
-}
-
-/* Parse an octal number, ignoring leading and trailing nonsense. */
-/*static int
-  parseoct(const char *p, size_t n)
-  {
-  int i = 0;
-
-  while ((*p < '0' || *p > '7') && n > 0) {
-  ++p;
-  --n;
+  auto outfolder = boost::filesystem::current_path() / "data";
+  std::vector<boost::filesystem::path> paths = {boost::filesystem::absolute(argv[1])};
+  if(boost::filesystem::is_directory(argv[1])) {
+    paths = get_all(argv[1], ".gz");
   }
-  while (*p >= '0' && *p <= '7' && n > 0) {
-  i *= 8;
-  i += *p - '0';
-  ++p;
-  --n;
-  }
-  return (i);
-  }
-
-  static int
-  is_end_of_archive(const char *p)
-  {
-  int n;
-  for (n = 511; n >= 0; --n)
-  if (p[n] != '\0')
-  return (0);
-  return (1);
-  }
-
-  static void
-  create_dir(char *pathname, int mode)
-  {
-  char *p;
-  int r;
-
-  if (pathname[strlen(pathname) - 1] == '/')
-  pathname[strlen(pathname) - 1] = '\0';
-
-  r = mkdir(pathname, mode);
-
-  if (r != 0) {
-  p = strrchr(pathname, '/');
-  if (p != NULL) {
- *p = '\0';
- create_dir(pathname, 0755);
- *p = '/';
- r = mkdir(pathname, mode);
- }
- }
- if (r != 0)
- fprintf(stderr, "Could not create directory %s\n", pathname);
- }
-
- static FILE *
- create_file(char *pathname, int mode)
- {
- FILE *f;
- f = fopen(pathname, "wb+");
- if (f == NULL) {
- char *p = strrchr(pathname, '/');
- if (p != NULL) {
- *p = '\0';
- create_dir(pathname, 0755);
- *p = '/';
- f = fopen(pathname, "wb+");
- }
- }
- return (f);
- }
-
- static int
- verify_checksum(const char *p)
-{
-  int n, u = 0;
-  for (n = 0; n < 512; ++n) {
-    if (n < 148 || n > 155)
-      u += ((unsigned char *)p)[n];
-    else
-      u += 0x20;
-
-  }
-  return (u == parseoct(p + 148, 8));
-}
-
-  static void
-untar(FILE *a, const char *path)
-{
-  char buff[512];
-  FILE *f = NULL;
-  size_t bytes_read;
-  int filesize;
-
-  printf("Extracting from %s\n", path);
-  for (;;) {
-    bytes_read = fread(buff, 1, 512, a);
-    if (bytes_read < 512) {
-      fprintf(stderr,
-          "Short read on %s: expected 512, got %d\n",
-          path, (int)bytes_read);
-      return;
-    }
-    if (is_end_of_archive(buff)) {
-      printf("End of %s\n", path);
-      return;
-    }
-    if (!verify_checksum(buff)) {
-      fprintf(stderr, "Checksum failure\n");
-      return;
-    }
-    filesize = parseoct(buff + 124, 12);
-    switch (buff[156]) {
-      case '1':
-        printf(" Ignoring hardlink %s\n", buff);
-        break;
-      case '2':
-        printf(" Ignoring symlink %s\n", buff);
-        break;
-      case '3':
-        printf(" Ignoring character device %s\n", buff);
-        break;
-      case '4':
-        printf(" Ignoring block device %s\n", buff);
-        break;
-      case '5':
-        printf(" Extracting dir %s\n", buff);
-        create_dir(buff, parseoct(buff + 100, 8));
-        filesize = 0;
-        break;
-      case '6':
-        printf(" Ignoring FIFO %s\n", buff);
-        break;
-      default:
-        printf(" Extracting file %s\n", buff);
-        f = create_file(buff, parseoct(buff + 100, 8));
-        break;
-    }
-    while (filesize > 0) {
-      bytes_read = fread(buff, 1, 512, a);
-      if (bytes_read < 512) {
-        fprintf(stderr,
-            "Short read on %s: Expected 512, got %d\n",
-            path, (int)bytes_read);
-        return;
-      }
-      if (filesize < 512)
-        bytes_read = filesize;
-      if (f != NULL) {
-        if (fwrite(buff, 1, bytes_read, f)
-            != bytes_read)
-        {
-          fprintf(stderr, "Failed write\n");
-          fclose(f);
-          f = NULL;
-        }
-      }
-      filesize -= bytes_read;
-    }
-    if (f != NULL) {
-      fclose(f);
-      f = NULL;
-    }
+  int size = paths.size();
+  int count = 1;
+  for(auto p : paths) {
+    auto start = std::chrono::high_resolution_clock::now();
+    decompress(p.string(), outfolder.string());
+    auto stop = std::chrono::high_resolution_clock::now();
+    auto t = std::chrono::duration_cast<std::chrono::seconds>(stop - start); 
+    std::cout << "decompressed " << std::to_string(count) << " of " << std::to_string(size) << " in " << t.count() << " seconds." << std::endl;
+    ++count;
   }
 }
-
-  int
-main(int argc, char **argv)
-{
-  FILE *a;
-
-  ++argv;
-  for ( ;*argv != NULL; ++argv) {
-    a = fopen(*argv, "rb");
-    if (a == NULL)
-      fprintf(stderr, "Unable to open %s\n", *argv);
-    else {
-      untar(a, *argv);
-      fclose(a);
-    }
-  }
-  return (0);
-}*/

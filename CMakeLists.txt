@@ -157,6 +157,7 @@ include_directories(${Boost_INCLUDE_DIRS})
 #)
 target_link_libraries(${PROJECT_NAME} bz2)
 target_link_libraries(${PROJECT_NAME} Boost::iostreams)
+target_link_libraries(${PROJECT_NAME} Boost::filesystem)
 target_link_libraries(${PROJECT_NAME} ZLIB::ZLIB)
 verbose_message("Successfully added all dependencies and linked against them.")
 
