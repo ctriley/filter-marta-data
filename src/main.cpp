@@ -61,14 +61,17 @@ std::string make_new_path(const std::string& filename) {
 
 static int decompress(const std::string& filename, const std::string& outfolder) {
   auto new_path = make_new_path(filename);
-  boost::filesystem::path output_path = boost::filesystem::absolute(outfolder) / new_path;
-  std::string on = output_path.string();
+  boost::filesystem::path op = boost::filesystem::absolute(outfolder) / new_path;
+  std::string on = op.string();
   auto outfile_name = on.substr(0, on.size()-3);
+  auto outfile_path = boost::filesystem::path(outfile_name);
+  boost::filesystem::create_directories(outfile_path.parent_path());
   using namespace std; 
   stringstream ss;
   stringstream decompressed;
   std::string result;
-  std::cout << outfile_name << std::endl;
+  std::cout << "in: " << filename << std::endl;
+  std::cout << "out: " << outfile_name << std::endl;
   ifstream file(filename, ios_base::in | ios_base::binary);
   boost::iostreams::filtering_streambuf<boost::iostreams::input> in;
   in.push(boost::iostreams::gzip_decompressor());
