@@ -91,7 +91,7 @@ static int decompress(const std::string& filename, const std::string& outfolder)
     getline(s, lng, ',');
     if(is_number(lat) && is_number(lng)) { 
       if(test_point(stod(lat), stod(lng))) {
-        ss << line;
+        ss << line << "\n";
         ++included_lines;
       }
     }
